@@ -43,6 +43,7 @@ jobs:
               --network rag-net \
               -p 127.0.0.1:8002:8000 \
               -e LLM_API_KEY=${{ secrets.LLM_API_KEY }} \
+              -e E2B_API_KEY=${{ secrets.E2B_API_KEY }} \
               -e HTTPS_PROXY=${{ secrets.LLM_PROXY_URL }} \
               -e NO_PROXY=qdrant,localhost,127.0.0.1 \
               ${{ env.IMAGE }}:latest

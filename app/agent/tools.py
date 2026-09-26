@@ -1,14 +1,13 @@
 from langchain_core.tools import tool
 
+from e2b_code_interpreter import Sandbox, SandboxException
 from langchain_community.tools import DuckDuckGoSearchRun
-from langchain_experimental.tools.python.tool import PythonREPLTool
 
 from app.rag.chain import build_rag_chain
 from app.config import settings
 
 _chain = None
 _retriever = None
-_python_repl = PythonREPLTool()
 _ddg_search = DuckDuckGoSearchRun()
 
 
@@ -38,16 +37,23 @@ def documentation_search(query: str) -> str:
     sources_block = "\n".join(f"- {url}" for url in sources)
     return f"{answer}\n\nSources:\n{sources_block}"
 
-# SECURITY NOTE: PythonREPLTool executes arbitrary code in the same process
-# as our app. It is NEVER exposed directly to end users — only the agent
-# decides what to send into it. For production with untrusted users, wrap
-# in a sandbox (gvisor, firecracker, e2b.dev).
+def _truncate(text: str) -> str:
+    limit = settings.agent_max_output_chars
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n... [truncated, {len(text) - limit} more chars]"
+
+
+# Код пишет LLM, а значит его может подсунуть пользователь или веб-страница
+# (prompt injection). Поэтому исполняем его не в нашем процессе, а в E2B —
+# отдельной одноразовой microVM без доступа к нашим файлам, env и сети.
 @tool
 def python_repl(code: str) -> str:
-    """Execute Python code and return the printed output.
+    """Execute Python code in an isolated sandbox and return its output.
 
     Use this tool for arithmetic, computing formulas, or transforming data.
-    The code runs in a sandboxed REPL; use `print()` to surface results.
+    Each call starts a fresh environment with no internet access and no state
+    from previous calls. Use `print()` to surface results.
 
     Args:
         code: Python source code to execute.
@@ -55,7 +61,27 @@ def python_repl(code: str) -> str:
     Returns:
         Stdout of the executed code, or error message.
     """
-    return _python_repl.run(code)
+    if not settings.e2b_api_key:
+        return "Python execution is disabled: E2B_API_KEY is not set."
+
+    try:
+        with Sandbox.create(
+            api_key=settings.e2b_api_key,
+            timeout=settings.sandbox_timeout + 30,
+            allow_internet_access=False,
+        ) as sandbox:
+            execution = sandbox.run_code(code, timeout=settings.sandbox_timeout)
+    except SandboxException as e:
+        return f"Sandbox error: {e}"
+
+    output = "".join(execution.logs.stdout)
+    if execution.text:
+        output += execution.text
+    if execution.logs.stderr:
+        output += "\n[stderr]\n" + "".join(execution.logs.stderr)
+    if execution.error:
+        output += f"\n{execution.error.name}: {execution.error.value}"
+    return _truncate(output.strip() or "(no output — use print())")
 
 
 @tool
