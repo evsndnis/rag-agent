@@ -17,6 +17,16 @@ from app.schemas.chat import ChatRequest, ChatResponse, Source
 from app.agent.guardrails import GuardrailError, check_input, check_output
 from app.schemas.agent import AgentRequest, AgentResponse, Source as AgentSource, TraceStep
 
+import structlog
+
+structlog.configure(
+    processors=[
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
