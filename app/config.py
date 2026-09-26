@@ -32,5 +32,15 @@ class Settings(BaseSettings):
     rerank_fetch_k: int = 20
     rerank_top_n: int = 5
 
+    # agent
+    max_iterations: int = 5
+    agent_temperature: float = 0.0
+    enable_web_search: bool = True
+    agent_max_output_chars: int = 2000
+
+    # E2B sandbox для python_repl. Без ключа инструмент отключён.
+    e2b_api_key: str | None = None
+    sandbox_timeout: int = 30
+
 
 settings = Settings()

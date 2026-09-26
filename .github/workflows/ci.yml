@@ -22,6 +22,8 @@ jobs:
         env:
           # фиктивный ключ: Settings() требует его при импорте, LLM в тестах не вызывается
           LLM_API_KEY: dummy
+          # без реальных запросов к DuckDuckGo: CI не должен зависеть от внешнего поиска
+          ENABLE_WEB_SEARCH: "false"
         run: pytest -v
 
   build-and-push:
