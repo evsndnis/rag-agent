@@ -14,7 +14,7 @@ jobs:
       - name: Prepare image name
         run: |
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE=ghcr.io/$OWNER_LOWER/rag-service" >> $GITHUB_ENV
+          echo "IMAGE=ghcr.io/$OWNER_LOWER/rag-agent" >> $GITHUB_ENV
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
@@ -31,17 +31,17 @@ jobs:
             docker pull ${{ env.IMAGE }}:latest
 
             # сносим старый контейнер, если был
-            docker rm -f rag-service 2>/dev/null || true
+            docker rm -f rag-agent 2>/dev/null || true
 
             # поднимаем новый в фоне; qdrant на сервере поднят и обновляется отдельно,
             # но должен быть в той же сети rag-net, чтобы был доступен по http://qdrant:6333.
             # OpenRouter блокирует IP из РФ: HTTPS-трафик (LLM, HF Hub) идёт через прокси
             # на зарубежном VPS; qdrant и localhost — напрямую
             docker run -d \
-              --name rag-service \
+              --name rag-agent \
               --restart unless-stopped \
               --network rag-net \
-              -p 127.0.0.1:8000:8000 \
+              -p 127.0.0.1:8002:8000 \
               -e LLM_API_KEY=${{ secrets.LLM_API_KEY }} \
               -e HTTPS_PROXY=${{ secrets.LLM_PROXY_URL }} \
               -e NO_PROXY=qdrant,localhost,127.0.0.1 \
@@ -49,11 +49,11 @@ jobs:
 
             # убеждаемся, что контейнер действительно жив, и только тогда чистим диск
             sleep 5
-            if [ -n "$(docker ps -q -f name=rag-service -f status=running)" ]; then
+            if [ -n "$(docker ps -q -f name=rag-agent -f status=running)" ]; then
               docker image prune -f
             else
               echo "Контейнер не поднялся"
-              docker logs --tail 50 rag-service
+              docker logs --tail 50 rag-agent
               exit 1
             fi
 

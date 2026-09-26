@@ -33,7 +33,7 @@ jobs:
       - name: Prepare image name
         run: |
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE=ghcr.io/$OWNER_LOWER/rag-service" >> $GITHUB_ENV
+          echo "IMAGE=ghcr.io/$OWNER_LOWER/rag-agent" >> $GITHUB_ENV
 
       - name: Log in to GHCR
         if: github.event_name == 'push'

@@ -65,13 +65,13 @@ docker compose up -d qdrant
 
 # 2. Корпус и индекс (с хоста Qdrant доступен на localhost)
 python -m app.scripts.load_corpus
-QDRANT_URL=http://localhost:6333 python -m app.scripts.index_corpus
+QDRANT_URL=http://localhost:6334 python -m app.scripts.index_corpus
 
 # 3. Сервис
 docker compose up -d app
 ```
 
-Откройте http://localhost:8001 — чат, http://localhost:8001/docs — Swagger.
+Откройте http://localhost:8002 — чат, http://localhost:8002/docs — Swagger.
 
 Тесты: `pytest` (цепочка RAG замокана, Qdrant и LLM не нужны).
 
