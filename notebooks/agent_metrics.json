@@ -1,0 +1,7 @@
+{
+  "faithfulness": 0.8224747474747474,
+  "answer_relevancy": 0.8710705779899796,
+  "tool_choice_accuracy_multi_hop": 0.4,
+  "avg_iterations": 2.1333333333333333,
+  "n_questions": 15
+}
