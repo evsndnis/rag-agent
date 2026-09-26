@@ -1,12 +1,18 @@
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 import gradio as gr
 from fastapi import FastAPI, HTTPException
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.rag.chain import build_rag_chain
+from app.agent.graph import build_agent_graph
 from app.schemas.chat import ChatRequest, ChatResponse, Source
+from app.agent.guardrails import GuardrailError, check_input, check_output
+from app.schemas.agent import AgentRequest, AgentResponse, Source as AgentSource, TraceStep
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 _chain = None
 _retriever = None
+_agent_graph = None
+_agent_checkpointer = None
 
 # LaTeX delimiters для Gradio Chatbot. LLM-ответы про Ridge, Lasso, метрики
 # содержат формулы $$..$$ / \[..\] / $..$ — без этого блока они отрисуются
@@ -30,12 +38,16 @@ LATEX_DELIMITERS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _chain, _retriever
+    global _chain, _retriever, _agent_graph, _agent_checkpointer
     _chain, _retriever = build_rag_chain()
-    print("RAG chain ready")
+    _agent_checkpointer = MemorySaver()
+    _agent_graph = build_agent_graph(checkpointer=_agent_checkpointer)
+    print("RAG chain + agent graph ready")
     yield
     _chain = None
     _retriever = None
+    _agent_graph = None
+    _agent_checkpointer = None
 
 
 app = FastAPI(title="RAG service", lifespan=lifespan)
@@ -69,6 +81,70 @@ def chat(payload: ChatRequest) -> ChatResponse:
         for doc in docs
     ]
     return ChatResponse(answer=answer, sources=sources)
+
+
+def _extract_trace(messages: list, sources: list) -> tuple[list[TraceStep], list[str]]:
+    steps: list[TraceStep] = []
+    tools_used: list[str] = []
+    step_num = 0
+    for msg in messages:
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            for tc in msg.tool_calls:
+                step_num += 1
+                tools_used.append(tc["name"])
+                steps.append(TraceStep(
+                    step=step_num,
+                    node="agent",
+                    tool=tc["name"],
+                    input=tc.get("args", {}),
+                    output="(tool requested)",
+                    latency_ms=0,
+                ))
+        elif isinstance(msg, ToolMessage):
+            if steps and steps[-1].output == "(tool requested)":
+                steps[-1].output = msg.content[:500]
+    return steps, tools_used
+
+
+@app.post("/agent", response_model=AgentResponse)
+def agent_chat(payload: AgentRequest) -> AgentResponse:
+    try:
+        check_input(payload.question)
+    except GuardrailError as e:
+        raise HTTPException(status_code=422, detail=f"Input rejected: {e}") from e
+
+    thread_id = payload.thread_id or str(uuid.uuid4())
+    t0 = time.perf_counter()
+    result = _agent_graph.invoke(
+        {"messages": [HumanMessage(content=payload.question)], "iteration_count": 0},
+        config={"configurable": {"thread_id": thread_id}},
+    )
+    total_ms = int((time.perf_counter() - t0) * 1000)
+
+    raw_answer = result["messages"][-1].content
+    trace_steps, tools_used = _extract_trace(result["messages"], sources=[])
+    if trace_steps:
+        trace_steps[-1].latency_ms = total_ms
+
+    safe_answer, guardrail_reason = check_output(raw_answer, tools_used)
+
+    sources: list[AgentSource] = []
+    for msg in result["messages"]:
+        if isinstance(msg, ToolMessage) and "Sources:" in msg.content:
+            body, _, sources_block = msg.content.partition("Sources:")
+            tool_text = body.strip()  # текст, который агент реально получил от инструмента
+            for line in sources_block.strip().splitlines():
+                url = line.strip().lstrip("- ").strip()
+                if url:
+                    sources.append(AgentSource(url=url, snippet=tool_text[:200], full_context=tool_text))
+
+    return AgentResponse(
+        answer=safe_answer,
+        trace=trace_steps,
+        sources=sources,
+        guardrail_triggered=guardrail_reason,
+        iterations=result.get("iteration_count", 0),
+    )
 
 
 def _format_timings(retrieval_ms: float, llm_ms: float | None, llm_error: str | None) -> str:
