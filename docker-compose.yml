@@ -12,6 +12,10 @@ services:
       - "8002:8000"                 # слева — порт ноутбука, справа — порт внутри контейнера
     env_file:
       - .env
+    environment:
+      # .env хранит адрес для запуска с хоста (localhost:6334);
+      # внутри docker-сети Qdrant доступен по имени сервиса
+      QDRANT_URL: http://qdrant:6333
     networks:
       - rag-agent-net
     depends_on:
