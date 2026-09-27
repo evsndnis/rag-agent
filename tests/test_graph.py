@@ -40,3 +40,13 @@ def test_graph_terminates_after_max_iterations(mock_llm_factory):
     )
 
     assert result["iteration_count"] >= 5
+
+def test_agent_llm_excludes_broken_providers(monkeypatch):
+    """OpenRouter-провайдеры из agent_ignore_providers не должны получать запросы агента."""
+    from app.agent.graph import _agent_llm_extra_body
+
+    monkeypatch.setattr("app.agent.graph.settings.agent_ignore_providers", ["DeepInfra", "Groq"])
+    assert _agent_llm_extra_body() == {"provider": {"ignore": ["DeepInfra", "Groq"]}}
+
+    monkeypatch.setattr("app.agent.graph.settings.agent_ignore_providers", [])
+    assert _agent_llm_extra_body() is None

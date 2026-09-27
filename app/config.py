@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     agent_temperature: float = 0.0
     enable_web_search: bool = True
     agent_max_output_chars: int = 2000
+    # Провайдеры OpenRouter, которые теряют tool_calls у llama-3.3-70b.
+    # Пустой список — без ограничений (нужно для не-OpenRouter провайдеров).
+    agent_ignore_providers: list[str] = ["DeepInfra", "Groq"]
 
     # E2B sandbox для python_repl. Без ключа инструмент отключён.
     e2b_api_key: str | None = None
