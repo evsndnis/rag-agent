@@ -399,7 +399,7 @@ with gr.Blocks(
     theme=gr.themes.Soft(),
 ) as demo:
     gr.Markdown(
-        "# 📖 scikit-learn docs RAG assistant\n"
+        "# 📖 scikit-learn docs RAG + Agent assistant\n"
         "_Спрашивай про Linear models, Decision trees, Metrics — на русском или английском._"
     )
     status_line = gr.Markdown(
