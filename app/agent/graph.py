@@ -25,10 +25,19 @@ class AgentState(TypedDict):
 _llm_with_tools = None
 
 
+def _agent_llm_extra_body() -> dict | None:
+    # OpenRouter сам выбирает провайдера модели. Часть провайдеров ломает
+    # tool calling: DeepInfra возвращает пустой ответ без tool_calls,
+    # Groq падает на валидации вызова. Исключаем их для агента.
+    if not settings.agent_ignore_providers:
+        return None
+    return {"provider": {"ignore": settings.agent_ignore_providers}}
+
+
 def _get_llm_with_tools():
     global _llm_with_tools
     if _llm_with_tools is None:
-        _llm_with_tools = get_llm().bind_tools(TOOLS)
+        _llm_with_tools = get_llm(extra_body=_agent_llm_extra_body()).bind_tools(TOOLS)
     return _llm_with_tools
 
 
